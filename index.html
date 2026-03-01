@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeltaFire</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: #0e0e10;
+    color: #e2e8f0;
+    height: 100dvh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 0;
+  }
+
+  #scanlines {
+    position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent 0px, transparent 2px,
+      rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px
+    );
+  }
+
+  /* ── HUD ── */
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 10; padding: 12px 24px;
+    display: none;
+    justify-content: space-between; align-items: center;
+    background: linear-gradient(180deg, rgba(14,14,16,0.9) 0%, transparent 100%);
+  }
+  #hud.visible { display: flex; }
+
+  .hud-item {
+    font-size: 1rem;
+    letter-spacing: 1px;
+    text-shadow: 0 0 8px rgba(96,165,250,0.6);
+  }
+  #tierDisplay {
+    padding: 4px 12px;
+    border: 1px solid #60a5fa;
+    border-radius: 6px;
+    box-shadow: 0 0 10px rgba(96,165,250,0.3);
+    transition: border-color 0.3s, box-shadow 0.3s, color 0.3s;
+  }
+
+  /* ── Quiz Panel ── */
+  #quizPanel {
+    position: fixed;
+    bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 10;
+    display: none;
+    flex-direction: column; align-items: center;
+    gap: 16px;
+    padding: 24px 32px;
+    background: rgba(14, 14, 16, 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(96,165,250,0.3);
+    border-radius: 16px;
+    box-shadow: 0 0 30px rgba(96,165,250,0.15);
+    min-width: 360px;
+    max-width: 500px;
+  }
+  #quizPanel.visible { display: flex; }
+
+  #problem {
+    font-size: 2.2rem;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-shadow: 0 0 12px rgba(250,204,21,0.5);
+    color: #facc15;
+  }
+
+  #answers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .answer-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 1.4rem;
+    font-weight: 500;
+    padding: 14px 8px;
+    background: rgba(14, 14, 16, 0.9);
+    color: #e2e8f0;
+    border: 2px solid #60a5fa;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: 0 0 10px rgba(96,165,250,0.2), inset 0 0 10px rgba(96,165,250,0.05);
+  }
+  .answer-btn:hover {
+    background: rgba(96,165,250,0.1);
+    box-shadow: 0 0 18px rgba(96,165,250,0.4), inset 0 0 14px rgba(96,165,250,0.1);
+    transform: scale(1.03);
+  }
+  .answer-btn:active { transform: scale(0.97); }
+
+  .answer-btn.correct {
+    border-color: #4ade80;
+    background: rgba(74,222,128,0.15);
+    box-shadow: 0 0 20px rgba(74,222,128,0.5);
+    color: #4ade80;
+  }
+  .answer-btn.wrong {
+    border-color: #ef4444;
+    background: rgba(239,68,68,0.15);
+    box-shadow: 0 0 20px rgba(239,68,68,0.5);
+    color: #ef4444;
+    animation: shake 0.4s ease;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-5px); }
+    80% { transform: translateX(5px); }
+  }
+
+  /* ── Start Screen ── */
+  #startScreen {
+    position: fixed; inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    background: rgba(14, 14, 16, 0.92);
+  }
+  #startScreen.hidden { display: none; }
+
+  #startScreen h1 {
+    font-size: 3rem;
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px rgba(96,165,250,0.6), 0 0 60px rgba(96,165,250,0.2);
+  }
+  #startScreen p {
+    font-size: 1rem;
+    color: #71717a;
+    max-width: 400px;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .big-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 1.3rem;
+    font-weight: 500;
+    padding: 14px 48px;
+    margin-top: 12px;
+    background: transparent;
+    color: #4ade80;
+    border: 2px solid #4ade80;
+    border-radius: 10px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    box-shadow: 0 0 15px rgba(74,222,128,0.3);
+    animation: pulse 2s ease-in-out infinite;
+    transition: all 0.2s;
+  }
+  .big-btn:hover {
+    background: rgba(74,222,128,0.1);
+    box-shadow: 0 0 30px rgba(74,222,128,0.5);
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 15px rgba(74,222,128,0.3); }
+    50% { box-shadow: 0 0 25px rgba(74,222,128,0.6); }
+  }
+
+  /* ── Game Over Screen ── */
+  #gameOverScreen {
+    position: fixed; inset: 0;
+    z-index: 20;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: rgba(14, 14, 16, 0.94);
+  }
+  #gameOverScreen.visible { display: flex; }
+
+  #gameOverScreen h1 {
+    font-size: 2.5rem;
+    color: #ef4444;
+    text-shadow: 0 0 20px rgba(239,68,68,0.6);
+    letter-spacing: 4px;
+  }
+  #finalScore {
+    font-size: 1.5rem;
+    color: #facc15;
+    text-shadow: 0 0 10px rgba(250,204,21,0.4);
+  }
+  #finalStreak {
+    font-size: 1rem;
+    color: #a78bfa;
+  }
+
+  #highScores {
+    margin-top: 8px;
+    text-align: center;
+  }
+  #highScores h2 {
+    font-size: 1.1rem;
+    color: #60a5fa;
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+  }
+  #highScoreList {
+    list-style: none;
+    padding: 0;
+    font-size: 0.85rem;
+    color: #71717a;
+    line-height: 1.8;
+  }
+  #highScoreList .current {
+    color: #facc15;
+    text-shadow: 0 0 6px rgba(250,204,21,0.3);
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    #quizPanel { min-width: 0; width: calc(100vw - 32px); padding: 16px 18px; }
+    #problem { font-size: 1.6rem; }
+    .answer-btn { font-size: 1.1rem; padding: 10px 6px; }
+    #startScreen h1 { font-size: 2rem; }
+    .hud-item { font-size: 0.8rem; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+<div id="scanlines"></div>
+
+<div id="hud">
+  <div class="hud-item" id="scoreDisplay">Score: 0</div>
+  <div class="hud-item" id="tierDisplay">Bullet &bull;</div>
+  <div class="hud-item" id="streakDisplay">Streak: 0</div>
+</div>
+
+<div id="quizPanel">
+  <div id="problem">3 + 5 = ?</div>
+  <div id="answers">
+    <button class="answer-btn">8</button>
+    <button class="answer-btn">7</button>
+    <button class="answer-btn">9</button>
+    <button class="answer-btn">6</button>
+  </div>
+</div>
+
+<div id="startScreen">
+  <h1>&#x1F5FC; DELTAFIRE &#x1F6F8;</h1>
+  <p>Solve addition and subtraction problems to defend your tower from space alien invaders!</p>
+  <button class="big-btn" id="startBtn">START GAME</button>
+</div>
+
+<div id="gameOverScreen">
+  <h1>GAME OVER</h1>
+  <div id="finalScore">Score: 0</div>
+  <div id="finalStreak">Best Streak: 0</div>
+  <div id="highScores">
+    <h2>HIGH SCORES</h2>
+    <ol id="highScoreList"></ol>
+  </div>
+  <button class="big-btn" id="restartBtn">PLAY AGAIN</button>
+</div>
+
+<script>
+// ═════════════════════════════════════════
+//  DELTAFIRE — Finite State Machine Architecture
+//
+//  Three-block FSM pattern (inspired by SystemVerilog best practices):
+//    Block 1: Next-State Logic   — pure function, no side effects
+//    Block 2: State Register     — executes transitions, logs changes
+//    Block 3: Output Logic       — Moore-style onEnter/onExit actions
+//
+//  State diagram:
+//
+//    ┌──────┐  START   ┌──────────────┐
+//    │ MENU ├─────────►│ PLAYING_READY │◄──────────────┐
+//    └──────┘          └──┬───┬───────┘                │
+//                CORRECT  │   │  WRONG          FEEDBACK_DONE
+//              ┌──────────┘   └──────────┐             │
+//              ▼                          ▼             │
+//     ┌────────────────┐     ┌────────────────┐        │
+//     │PLAYING_CORRECT ├────►│ PLAYING_WRONG  ├────────┘
+//     └───────┬────────┘     └───────┬────────┘
+//             │ FEEDBACK_DONE        │
+//             └──────────────────────┘
+//                         │
+//              ALIEN_REACHED (from any PLAYING_*)
+//                         ▼
+//                   ┌───────────┐  RESTART  ┌──────────────┐
+//                   │ GAME_OVER ├──────────►│ PLAYING_READY │
+//                   └───────────┘           └──────────────┘
+//
+//    TAB_BLUR from any PLAYING_* → PAUSED
+//    TAB_FOCUS from PAUSED → PLAYING_READY
+//
+// ═════════════════════════════════════════
+
+// ─────────────────────────────────────────
+//  FSM State & Event Enumerations
+// ─────────────────────────────────────────
+const State = Object.freeze({
+  MENU:            'MENU',
+  PLAYING_READY:   'PLAYING_READY',
+  PLAYING_CORRECT: 'PLAYING_CORRECT',
+  PLAYING_WRONG:   'PLAYING_WRONG',
+  GAME_OVER:       'GAME_OVER',
+  PAUSED:          'PAUSED',
+});
+
+const Event = Object.freeze({
+  START:          'START',
+  ANSWER_CORRECT: 'ANSWER_CORRECT',
+  ANSWER_WRONG:   'ANSWER_WRONG',
+  FEEDBACK_DONE:  'FEEDBACK_DONE',
+  ALIEN_REACHED:  'ALIEN_REACHED',
+  TAB_BLUR:       'TAB_BLUR',
+  TAB_FOCUS:      'TAB_FOCUS',
+  RESTART:        'RESTART',
+});
+
+// ─────────────────────────────────────────
+//  Constants & Config
+// ─────────────────────────────────────────
+const TOWER_X = 80;
+const TOWER_SIZE = 96;
+const ALIEN_SIZE_MIN = 28;
+const ALIEN_SIZE_MAX = 52;
+const NEON = ['#4ade80','#60a5fa','#f472b6','#facc15','#a78bfa','#fb923c'];
+
+// Pre-allocated lightning bolt points (9 points × 2 coords, reused every frame)
+const _boltX = new Float64Array(9);
+const _boltY = new Float64Array(9);
+
+const TIERS = [
+  { name: 'Bullet',    sym: '\u2022', minStreak: 0,  color: '#e2e8f0', speed: 700,  size: 6  },
+  { name: 'Fireball',  sym: '\uD83D\uDD25', minStreak: 5,  color: '#fb923c', speed: 550,  size: 22 },
+  { name: 'Lightning', sym: '\u26A1',  minStreak: 10, color: '#facc15', speed: 900,  size: 22 },
+  { name: 'Laser',     sym: null,      minStreak: 20, color: '#f472b6', speed: Infinity, size: 0 },
+];
+
+const HS_KEY = 'deltafire_highscores';
+
+// ─────────────────────────────────────────
+//  DOM refs
+// ─────────────────────────────────────────
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const hudEl = document.getElementById('hud');
+const quizPanel = document.getElementById('quizPanel');
+const problemEl = document.getElementById('problem');
+const answersEl = document.getElementById('answers');
+const btns = answersEl.querySelectorAll('.answer-btn');
+const scoreEl = document.getElementById('scoreDisplay');
+const streakEl = document.getElementById('streakDisplay');
+const tierEl = document.getElementById('tierDisplay');
+const startScreen = document.getElementById('startScreen');
+const startBtn = document.getElementById('startBtn');
+const goScreen = document.getElementById('gameOverScreen');
+const restartBtn = document.getElementById('restartBtn');
+const finalScoreEl = document.getElementById('finalScore');
+const finalStreakEl = document.getElementById('finalStreak');
+const hsList = document.getElementById('highScoreList');
+
+// ─────────────────────────────────────────
+//  Game Data (non-FSM — gameplay state)
+// ─────────────────────────────────────────
+let game = {};
+
+function resetGameData() {
+  game = {
+    score: 0,
+    streak: 0,
+    bestStreak: 0,
+    aliens: [],
+    projectiles: [],
+    particles: [],
+    stars: [],
+    towerY: canvas.height * 0.72,
+    currentProblem: null,
+    spawnTimer: 2.0,
+    lastTime: 0,
+    laserBeam: null,
+  };
+}
+resetGameData();
+
+// ─────────────────────────────────────────
+//  Canvas sizing
+// ─────────────────────────────────────────
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  if (game) game.towerY = canvas.height * 0.72;
+  if (game && game.stars && game.stars.length === 0) generateStars();
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─────────────────────────────────────────
+//  Utilities
+// ─────────────────────────────────────────
+function randInt(lo, hi) { return lo + (Math.random() * (hi - lo + 1) | 0); }
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = randInt(0, i);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function filterInPlace(arr, fn) {
+  let w = 0;
+  for (let r = 0; r < arr.length; r++) {
+    if (fn(arr[r])) arr[w++] = arr[r];
+  }
+  arr.length = w;
+}
+
+// ─────────────────────────────────────────
+//  Sprite Cache (emoji → offscreen canvas)
+//
+//  Renders emoji + shadow once to an offscreen canvas.
+//  Per-frame cost drops from fillText+shadowBlur to drawImage.
+// ─────────────────────────────────────────
+const spriteCache = new Map();
+
+function getSprite(text, size, shadowColor, blur) {
+  const key = text + '|' + size;
+  if (spriteCache.has(key)) return spriteCache.get(key);
+  const pad = blur ? blur * 2 : 0;
+  const dim = size + pad * 2;
+  const osc = document.createElement('canvas');
+  osc.width = dim;
+  osc.height = dim;
+  const c = osc.getContext('2d');
+  c.font = size + 'px serif';
+  c.textBaseline = 'middle';
+  c.textAlign = 'center';
+  if (shadowColor) {
+    c.shadowColor = shadowColor;
+    c.shadowBlur = blur;
+  }
+  c.fillText(text, dim / 2, dim / 2);
+  const sprite = { canvas: osc, pad };
+  spriteCache.set(key, sprite);
+  return sprite;
+}
+
+// ─────────────────────────────────────────
+//  Sound (Web Audio — pre-rendered buffers)
+//
+//  All sounds are baked into AudioBuffers at init time.
+//  At play time: only a BufferSource + GainNode are created
+//  (the two cheapest Web Audio operations).
+// ─────────────────────────────────────────
+let audioCtx = null;
+let soundEnabled = true;
+const soundBuffers = {}; // { Bullet, Fireball, Lightning, Laser, Explosion }
+const lastPlayTime = {}; // rate-limit: last play timestamp per sound name
+const MIN_SOUND_INTERVAL = 50; // ms — minimum gap between same sound
+
+function renderTone(ac, type, freqStart, freqEnd, duration) {
+  const len = Math.ceil(ac.sampleRate * duration);
+  const buf = ac.createBuffer(1, len, ac.sampleRate);
+  const data = buf.getChannelData(0);
+  let phase = 0;
+  for (let i = 0; i < len; i++) {
+    const t = i / len;
+    const freq = freqStart + (freqEnd - freqStart) * t;
+    const envelope = 1 - t; // linear fade
+    phase += freq / ac.sampleRate;
+    let sample;
+    if (type === 'sine') {
+      sample = Math.sin(phase * Math.PI * 2);
+    } else if (type === 'square') {
+      sample = (phase % 1) < 0.5 ? 1 : -1;
+    } else if (type === 'sawtooth') {
+      sample = 2 * (phase % 1) - 1;
+    } else if (type === 'triangle') {
+      sample = 4 * Math.abs((phase % 1) - 0.5) - 1;
+    }
+    data[i] = sample * envelope * 0.08;
+  }
+  return buf;
+}
+
+function renderNoise(ac, duration) {
+  const len = Math.ceil(ac.sampleRate * duration);
+  const buf = ac.createBuffer(1, len, ac.sampleRate);
+  const data = buf.getChannelData(0);
+  // low-pass filtered noise with decay
+  let prev = 0;
+  const alpha = 0.15; // filter coefficient (lower = more muffled)
+  for (let i = 0; i < len; i++) {
+    const t = i / len;
+    const raw = (Math.random() * 2 - 1) * (1 - t);
+    prev = prev + alpha * (raw - prev); // simple RC low-pass
+    data[i] = prev * 0.1;
+  }
+  return buf;
+}
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  // Pre-render all sound effects into buffers
+  soundBuffers.Bullet    = renderTone(audioCtx, 'sine',     600, 400, 0.1);
+  soundBuffers.Fireball  = renderTone(audioCtx, 'triangle', 400, 150, 0.2);
+  soundBuffers.Lightning = renderTone(audioCtx, 'square',  1200, 300, 0.15);
+  soundBuffers.Laser     = renderTone(audioCtx, 'sawtooth', 800, 200, 0.3);
+  soundBuffers.Explosion = renderNoise(audioCtx, 0.15);
+  console.log('Audio: all sound buffers pre-rendered');
+}
+
+function playBuffer(name) {
+  if (!soundEnabled || !audioCtx) return;
+  const buf = soundBuffers[name];
+  if (!buf) return;
+  // Rate-limit: skip if same sound played too recently
+  const now = performance.now();
+  if (lastPlayTime[name] && now - lastPlayTime[name] < MIN_SOUND_INTERVAL) return;
+  lastPlayTime[name] = now;
+  // Resume context if suspended (belt-and-suspenders for browser policy)
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(audioCtx.destination);
+  src.onended = () => src.disconnect();
+  src.start();
+}
+
+function playShoot(tier) { playBuffer(tier); }
+function playExplosion() { playBuffer('Explosion'); }
+
+// Sound queue — collects sounds during update(), flushed after render()
+const soundQueue = [];
+function flushSounds() {
+  for (let i = 0; i < soundQueue.length; i++) playBuffer(soundQueue[i]);
+  soundQueue.length = 0;
+}
+
+// ─────────────────────────────────────────
+//  Stars
+// ─────────────────────────────────────────
+function generateStars() {
+  game.stars = [];
+  for (let i = 0; i < 180; i++) {
+    game.stars.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: 0.4 + Math.random() * 1.6,
+      a: 0.3 + Math.random() * 0.7,
+      tw: 0.5 + Math.random() * 2.5,
+    });
+  }
+}
+
+// ─────────────────────────────────────────
+//  Quiz Engine (Addition & Subtraction)
+// ─────────────────────────────────────────
+function generateProblem() {
+  const streak = game.streak;
+  const isAdd = Math.random() < 0.5;
+  let a, b, answer;
+
+  if (streak < 5) {
+    // Bullet tier — Easy: single-digit operands
+    if (isAdd) {
+      a = randInt(1, 9);
+      b = randInt(1, 9);
+      answer = a + b;
+    } else {
+      a = randInt(2, 9);
+      b = randInt(1, a);
+      answer = a - b;
+    }
+  } else if (streak < 10) {
+    // Fireball tier — Medium: double + single or double - single
+    if (isAdd) {
+      a = randInt(10, 50);
+      b = randInt(1, 9);
+      answer = a + b;
+    } else {
+      a = randInt(10, 50);
+      b = randInt(1, 9);
+      answer = a - b;
+    }
+  } else if (streak < 20) {
+    // Lightning tier — Hard: double + double or double - double (range 10-50)
+    if (isAdd) {
+      a = randInt(10, 50);
+      b = randInt(10, 50);
+      answer = a + b;
+    } else {
+      a = randInt(10, 50);
+      b = randInt(10, 50);
+      if (b > a) { const tmp = a; a = b; b = tmp; }
+      answer = a - b;
+    }
+  } else {
+    // Laser tier — Expert: double + double or double - double (range 10-99)
+    if (isAdd) {
+      a = randInt(10, 99);
+      b = randInt(10, 99);
+      answer = a + b;
+    } else {
+      a = randInt(10, 99);
+      b = randInt(10, 99);
+      if (b > a) { const tmp = a; a = b; b = tmp; }
+      answer = a - b;
+    }
+  }
+
+  const op = isAdd ? '+' : '\u2212';
+
+  // Generate decoy answers
+  const choices = new Set([answer]);
+  const swapAnswer = isAdd ? Math.abs(a - b) : a + b;
+  const strats = [
+    () => answer + randInt(1, 5),                              // off-by positive
+    () => answer - randInt(1, 5),                              // off-by negative
+    () => swapAnswer,                                          // swap operation
+    () => randInt(Math.max(1, answer - 10), answer + 10),      // plausible range
+  ];
+
+  let guard = 0;
+  while (choices.size < 4 && guard++ < 50) {
+    const v = strats[randInt(0, strats.length - 1)]();
+    if (v > 0 && v !== answer && Number.isInteger(v)) choices.add(v);
+  }
+  // Fallback: fill remaining slots with plausible positive integers
+  while (choices.size < 4) {
+    const v = randInt(Math.max(1, answer - 10), answer + 10);
+    if (v > 0 && v !== answer) choices.add(v);
+  }
+
+  return { a, b, op, answer, choices: shuffle([...choices]) };
+}
+
+function showProblem() {
+  const p = generateProblem();
+  game.currentProblem = p;
+  problemEl.textContent = p.a + ' ' + p.op + ' ' + p.b + ' = ?';
+  btns.forEach((btn, i) => {
+    btn.textContent = p.choices[i];
+    btn.dataset.value = p.choices[i];
+    btn.className = 'answer-btn';
+  });
+}
+
+// ─────────────────────────────────────────
+//  Tier
+// ─────────────────────────────────────────
+function getTier() {
+  for (let i = TIERS.length - 1; i >= 0; i--) {
+    if (game.streak >= TIERS[i].minStreak) return TIERS[i];
+  }
+  return TIERS[0];
+}
+
+function updateHUD() {
+  scoreEl.textContent = 'Score: ' + game.score;
+  streakEl.textContent = 'Streak: ' + game.streak;
+  const t = getTier();
+  tierEl.textContent = t.name + (t.sym ? ' ' + t.sym : ' \u2501\u2501');
+  tierEl.style.borderColor = t.color;
+  tierEl.style.boxShadow = '0 0 10px ' + t.color + '66';
+  tierEl.style.color = t.color;
+}
+
+// ─────────────────────────────────────────
+//  Alien spawning
+// ─────────────────────────────────────────
+let alienId = 0;
+
+function getSpawnInterval() {
+  return Math.max(0.8, 3.0 * Math.pow(0.95, Math.floor(game.score / 5)));
+}
+
+function getAlienSpeed() {
+  return 55 + game.score * 1.8 + randInt(-8, 8);
+}
+
+const MOVE_PATTERNS = ['sine', 'zigzag', 'retreat', 'swoop'];
+
+function spawnAlien() {
+  const yMin = 60;
+  const shipSize = randInt(ALIEN_SIZE_MIN, ALIEN_SIZE_MAX);
+  const yMax = game.towerY - shipSize;
+  if (yMax < yMin + 40) return;
+  const baseY = randInt(yMin, yMax);
+  const pattern = MOVE_PATTERNS[randInt(0, MOVE_PATTERNS.length - 1)];
+  game.aliens.push({
+    id: alienId++,
+    x: canvas.width + 20,
+    y: baseY,
+    baseY: baseY,
+    speed: getAlienSpeed(),
+    size: shipSize,
+    pattern: pattern,
+    age: 0,
+    amp: 20 + Math.random() * 30,
+    freq: 0.6 + Math.random() * 0.9,
+    phase: Math.random() * Math.PI * 2,
+  });
+  console.log('Alien #' + (alienId - 1) + ' spawned — path: ' + pattern);
+}
+
+// ─────────────────────────────────────────
+//  Projectiles & Laser
+// ─────────────────────────────────────────
+function getFrontAlien() {
+  if (game.aliens.length === 0) return null;
+  return game.aliens.reduce((c, a) => a.x < c.x ? a : c);
+}
+
+function fireProjectile(tier, target) {
+  playShoot(tier.name);
+  const sx = TOWER_X + 30;
+  const sy = game.towerY;
+  let tx, ty;
+  if (target) {
+    tx = target.x + target.size / 2;
+    ty = target.y + target.size / 2;
+  } else {
+    tx = canvas.width + 100;
+    ty = sy;
+  }
+  const dx = tx - sx, dy = ty - sy;
+  const len = Math.hypot(dx, dy) || 1;
+
+  if (tier.name === 'Laser') {
+    if (target) {
+      spawnExplosion(target.x + target.size / 2, target.y + target.size / 2);
+      playExplosion();
+      game.aliens = game.aliens.filter(a => a.id !== target.id);
+    }
+    game.laserBeam = {
+      x1: sx, y1: sy,
+      x2: target ? tx : canvas.width + 50,
+      y2: target ? ty : sy,
+      alpha: 1.0, width: 10,
+    };
+    return;
+  }
+
+  game.projectiles.push({
+    x: sx, y: sy,
+    dx: dx / len, dy: dy / len,
+    speed: tier.speed,
+    tier: tier,
+    targetId: target ? target.id : -1,
+    alive: true,
+  });
+}
+
+function spawnExplosion(x, y) {
+  // Particles only — sound is handled by caller
+  for (let i = 0; i < 24; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 60 + Math.random() * 220;
+    game.particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      size: 2 + Math.random() * 5,
+      color: NEON[randInt(0, NEON.length - 1)],
+      alpha: 1.0,
+      decay: 1.8 + Math.random() * 1.5,
+    });
+  }
+}
+
+// ═════════════════════════════════════════
+//  FSM BLOCK 1: Next-State Logic (pure)
+//
+//  Given current state + event → next state (or null if invalid).
+//  No side effects. Default returns null (event ignored).
+// ═════════════════════════════════════════
+function nextState(current, event) {
+  switch (current) {
+    case State.MENU:
+      if (event === Event.START)          return State.PLAYING_READY;
+      return null; // default: ignore
+
+    case State.PLAYING_READY:
+      if (event === Event.ANSWER_CORRECT) return State.PLAYING_CORRECT;
+      if (event === Event.ANSWER_WRONG)   return State.PLAYING_WRONG;
+      if (event === Event.ALIEN_REACHED)  return State.GAME_OVER;
+      if (event === Event.TAB_BLUR)       return State.PAUSED;
+      return null;
+
+    case State.PLAYING_CORRECT:
+      if (event === Event.FEEDBACK_DONE)  return State.PLAYING_READY;
+      if (event === Event.ALIEN_REACHED)  return State.GAME_OVER;
+      if (event === Event.TAB_BLUR)       return State.PAUSED;
+      return null;
+
+    case State.PLAYING_WRONG:
+      if (event === Event.FEEDBACK_DONE)  return State.PLAYING_READY;
+      if (event === Event.ALIEN_REACHED)  return State.GAME_OVER;
+      if (event === Event.TAB_BLUR)       return State.PAUSED;
+      return null;
+
+    case State.PAUSED:
+      if (event === Event.TAB_FOCUS)      return State.PLAYING_READY;
+      return null;
+
+    case State.GAME_OVER:
+      if (event === Event.RESTART)        return State.PLAYING_READY;
+      return null;
+
+    default:
+      return null; // unknown state — safe default
+  }
+}
+
+// ═════════════════════════════════════════
+//  FSM BLOCK 2: State Register (transition executor)
+//
+//  Applies transitions, calls onExit → updates register → calls onEnter.
+//  Logs every transition and ignored event to console.
+// ═════════════════════════════════════════
+const fsm = {
+  current: State.MENU,
+  _pendingTimer: null,
+  _pausedFrom: null,
+
+  dispatch(event, payload) {
+    const next = nextState(this.current, event);
+    if (next === null) {
+      console.log('FSM: [' + this.current + '] + ' + event + ' → (ignored)');
+      return;
+    }
+    const prev = this.current;
+    console.log('FSM: [' + prev + '] + ' + event + ' → [' + next + ']');
+
+    // Cancel any pending timed transition before leaving current state
+    this.cancelPending();
+
+    onExit(prev, next, payload);
+    this.current = next;
+    onEnter(next, prev, payload);
+  },
+
+  // Schedule a delayed FSM event (auto-cancelled on next transition)
+  scheduleDispatch(event, ms) {
+    this.scheduleCallback(() => this.dispatch(event), ms);
+  },
+
+  // Schedule a delayed callback tied to the current state
+  scheduleCallback(fn, ms) {
+    this.cancelPending();
+    this._pendingTimer = setTimeout(() => {
+      this._pendingTimer = null;
+      fn();
+    }, ms);
+  },
+
+  cancelPending() {
+    if (this._pendingTimer !== null) {
+      clearTimeout(this._pendingTimer);
+      this._pendingTimer = null;
+    }
+  },
+
+  isPlaying() {
+    return this.current === State.PLAYING_READY ||
+           this.current === State.PLAYING_CORRECT ||
+           this.current === State.PLAYING_WRONG;
+  },
+};
+
+// ═════════════════════════════════════════
+//  FSM BLOCK 3: Output Logic (Moore-style)
+//
+//  Actions depend only on the state being entered/exited.
+//  onExit: cleanup for the state being left
+//  onEnter: setup for the state being entered
+// ═════════════════════════════════════════
+function onExit(fromState, toState, payload) {
+  // Track which playing state we paused from (for correct resume behavior)
+  if (toState === State.PAUSED) fsm._pausedFrom = fromState;
+
+  switch (fromState) {
+    case State.MENU:
+      startScreen.classList.add('hidden');
+      break;
+    case State.GAME_OVER:
+      goScreen.classList.remove('visible');
+      break;
+    case State.PAUSED:
+      // resume timing so dt doesn't spike
+      game.lastTime = performance.now();
+      break;
+  }
+}
+
+function onEnter(toState, fromState, payload) {
+  switch (toState) {
+
+    // ── PLAYING_READY: waiting for player input ──
+    case State.PLAYING_READY: {
+      const freshStart = (fromState === State.MENU || fromState === State.GAME_OVER);
+      if (freshStart) {
+        // full game initialization
+        initAudio();
+        resetGameData();
+        generateStars();
+        hudEl.classList.add('visible');
+        quizPanel.classList.add('visible');
+        updateHUD();
+        spawnAlien();
+        game.lastTime = performance.now();
+      }
+      // Show new problem unless resuming a pause that interrupted PLAYING_READY
+      const resumingMidQuestion = fromState === State.PAUSED
+        && fsm._pausedFrom === State.PLAYING_READY;
+      if (!resumingMidQuestion) {
+        showProblem();
+      }
+      // (re)start game loop
+      startGameLoop();
+      break;
+    }
+
+    // ── PLAYING_CORRECT: correct answer feedback ──
+    case State.PLAYING_CORRECT: {
+      payload.btn.classList.add('correct');
+      game.score++;
+      game.streak++;
+      if (game.streak > game.bestStreak) game.bestStreak = game.streak;
+      updateHUD();
+      const tier = getTier();
+      const target = getFrontAlien();
+      fireProjectile(tier, target);
+      fsm.scheduleDispatch(Event.FEEDBACK_DONE, 400);
+      break;
+    }
+
+    // ── PLAYING_WRONG: wrong answer feedback ──
+    case State.PLAYING_WRONG: {
+      payload.btn.classList.add('wrong');
+      const p = game.currentProblem;
+      problemEl.textContent = p.a + ' ' + p.op + ' ' + p.b + ' = ' + p.answer;
+      btns.forEach(b => {
+        if (parseInt(b.dataset.value) === p.answer) b.classList.add('correct');
+      });
+      game.streak = 0;
+      updateHUD();
+      // penalty: all aliens advance
+      for (const a of game.aliens) a.x -= 50;
+      fsm.scheduleDispatch(Event.FEEDBACK_DONE, 800);
+      break;
+    }
+
+    // ── GAME_OVER: tower destroyed ──
+    case State.GAME_OVER:
+      hudEl.classList.remove('visible');
+      quizPanel.classList.remove('visible');
+      finalScoreEl.textContent = 'Score: ' + game.score;
+      finalStreakEl.textContent = 'Best Streak: ' + game.bestStreak;
+      saveHighScore(game.score, game.bestStreak);
+      displayHighScores();
+      fsm.scheduleCallback(() => {
+        goScreen.classList.add('visible');
+        requestAnimationFrame(idleRender);
+      }, 300);
+      break;
+
+    // ── PAUSED: tab hidden ──
+    case State.PAUSED:
+      // game loop naturally stops (isPlaying() returns false)
+      break;
+
+    // ── MENU: initial state (only entered at boot) ──
+    case State.MENU:
+      startScreen.classList.remove('hidden');
+      hudEl.classList.remove('visible');
+      quizPanel.classList.remove('visible');
+      requestAnimationFrame(idleRender);
+      break;
+  }
+}
+
+// ─────────────────────────────────────────
+//  Update (game simulation)
+// ─────────────────────────────────────────
+function update(dt) {
+  // Spawn aliens
+  game.spawnTimer -= dt;
+  if (game.spawnTimer <= 0) {
+    spawnAlien();
+    game.spawnTimer = getSpawnInterval();
+  }
+
+  // Move aliens — non-linear paths
+  const yMin = 60;
+  const yMaxBase = game.towerY - ALIEN_SIZE_MAX;
+  for (const a of game.aliens) {
+    a.age += dt;
+    const t = a.age;
+
+    if (a.pattern === 'sine') {
+      a.x -= a.speed * dt;
+      a.y = a.baseY + Math.sin(t * a.freq + a.phase) * a.amp;
+    } else if (a.pattern === 'zigzag') {
+      a.x -= a.speed * dt;
+      const period = 1.0 / a.freq;
+      const tri = Math.abs(((t + a.phase) % period) / period * 2 - 1) * 2 - 1;
+      a.y = a.baseY + tri * a.amp;
+    } else if (a.pattern === 'retreat') {
+      const retreatCycle = Math.sin(t * a.freq * 0.8 + a.phase);
+      const xSpeed = a.speed * (retreatCycle > 0.5 ? -0.4 : 1.0);
+      a.x -= xSpeed * dt;
+      a.y = a.baseY + Math.sin(t * a.freq * 0.5 + a.phase) * a.amp * 0.7;
+    } else if (a.pattern === 'swoop') {
+      const swoopX = Math.sin(t * a.freq * 0.4 + a.phase) * a.speed * 0.35;
+      a.x -= (a.speed * 0.7 - swoopX) * dt;
+      a.y = a.baseY + Math.sin(t * a.freq * 0.6 + a.phase) * a.amp
+                     + Math.cos(t * a.freq * 0.3 + a.phase) * a.amp * 0.5;
+    }
+
+    a.y = Math.max(yMin, Math.min(yMaxBase, a.y));
+  }
+
+  // Check game over — dispatch event instead of calling function directly
+  for (const a of game.aliens) {
+    if (a.x <= TOWER_X + 40) {
+      fsm.dispatch(Event.ALIEN_REACHED);
+      return;
+    }
+  }
+
+  // Move projectiles (homing)
+  for (const p of game.projectiles) {
+    const target = game.aliens.find(a => a.id === p.targetId && a.x > -100);
+    if (target) {
+      const tx = target.x + target.size / 2;
+      const ty = target.y + target.size / 2;
+      const dx = tx - p.x, dy = ty - p.y;
+      const len = Math.hypot(dx, dy) || 1;
+      p.dx = dx / len;
+      p.dy = dy / len;
+    }
+    p.x += p.dx * p.speed * dt;
+    p.y += p.dy * p.speed * dt;
+
+    if (p.tier.name === 'Fireball') {
+      if (Math.random() < 0.6) {
+        game.particles.push({
+          x: p.x + (Math.random() - 0.5) * 8,
+          y: p.y + (Math.random() - 0.5) * 8,
+          vx: (Math.random() - 0.5) * 30,
+          vy: (Math.random() - 0.5) * 30,
+          size: 2 + Math.random() * 3,
+          color: Math.random() < 0.5 ? '#fb923c' : '#facc15',
+          alpha: 0.8,
+          decay: 3.0,
+        });
+      }
+    }
+
+    if (p.x > canvas.width + 60 || p.x < -60 || p.y > canvas.height + 60 || p.y < -60) {
+      p.alive = false;
+    }
+  }
+
+  // Collisions
+  for (const p of game.projectiles) {
+    if (!p.alive) continue;
+    for (const a of game.aliens) {
+      const cx = a.x + a.size / 2;
+      const cy = a.y + a.size / 2;
+      if (Math.hypot(p.x - cx, p.y - cy) < a.size * 0.7) {
+        spawnExplosion(cx, cy);
+        soundQueue.push('Explosion');
+        a.x = -9999;
+        p.alive = false;
+        break;
+      }
+    }
+  }
+
+  // Cleanup (in-place to avoid allocating new arrays every frame)
+  filterInPlace(game.aliens, a => a.x > -100);
+  filterInPlace(game.projectiles, p => p.alive);
+
+  // Particles
+  for (const p of game.particles) {
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vx *= 0.97;
+    p.vy *= 0.97;
+    p.alpha -= p.decay * dt;
+  }
+  filterInPlace(game.particles, p => p.alpha > 0);
+
+  // Laser fade
+  if (game.laserBeam) {
+    game.laserBeam.alpha -= dt * 3.5;
+    game.laserBeam.width *= 0.95;
+    if (game.laserBeam.alpha <= 0) game.laserBeam = null;
+  }
+}
+
+// ─────────────────────────────────────────
+//  Render
+// ─────────────────────────────────────────
+function render(time) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Stars
+  for (const s of game.stars) {
+    const flicker = 0.5 + 0.5 * Math.sin(time * 0.001 * s.tw);
+    ctx.globalAlpha = s.a * flicker;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Tower (cached sprite — shadow baked in)
+  const ts = getSprite('\uD83D\uDDFC', TOWER_SIZE, '#facc15', 20);
+  ctx.drawImage(ts.canvas, TOWER_X - ts.canvas.width / 2, game.towerY - ts.canvas.height / 2);
+
+  // Aliens (cached sprites — shadow baked in, per-size)
+  for (const a of game.aliens) {
+    const as = getSprite('\uD83D\uDEF8', a.size, '#a78bfa', 12);
+    ctx.drawImage(as.canvas, a.x - as.pad, a.y - as.pad);
+  }
+
+  // Projectiles
+  for (const p of game.projectiles) {
+    if (p.tier.name === 'Bullet') {
+      // Glow: larger semi-transparent circle instead of shadowBlur
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.2)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = p.tier.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.tier.name === 'Fireball') {
+      const fs = getSprite('\uD83D\uDD25', p.tier.size, null, 0);
+      ctx.drawImage(fs.canvas, p.x - fs.canvas.width / 2, p.y - fs.canvas.height / 2);
+    } else if (p.tier.name === 'Lightning') {
+      // Reuse pre-allocated typed arrays — zero allocations per frame
+      _boltX[0] = TOWER_X + 30;
+      _boltY[0] = game.towerY;
+      for (let i = 1; i <= 8; i++) {
+        const t = i * 0.125; // i / 8
+        _boltX[i] = lerp(TOWER_X + 30, p.x, t);
+        _boltY[i] = lerp(game.towerY, p.y, t) + (i < 8 ? (Math.random() - 0.5) * 40 : 0);
+      }
+      // Outer glow
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.15)';
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(_boltX[0], _boltY[0]);
+      for (let i = 1; i <= 8; i++) ctx.lineTo(_boltX[i], _boltY[i]);
+      ctx.stroke();
+      // Core bolt
+      ctx.strokeStyle = '#facc15';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(_boltX[0], _boltY[0]);
+      for (let i = 1; i <= 8; i++) ctx.lineTo(_boltX[i], _boltY[i]);
+      ctx.stroke();
+      // Cached ⚡ sprite at tip
+      const ls = getSprite('\u26A1', p.tier.size, null, 0);
+      ctx.drawImage(ls.canvas, p.x - ls.canvas.width / 2, p.y - ls.canvas.height / 2);
+    }
+  }
+
+  // Laser beam — layered strokes (no shadowBlur)
+  if (game.laserBeam) {
+    const lb = game.laserBeam;
+    ctx.strokeStyle = 'rgba(244, 114, 182, ' + (lb.alpha * 0.1) + ')';
+    ctx.lineWidth = lb.width * 4;
+    ctx.beginPath();
+    ctx.moveTo(lb.x1, lb.y1);
+    ctx.lineTo(lb.x2, lb.y2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(244, 114, 182, ' + (lb.alpha * 0.3) + ')';
+    ctx.lineWidth = lb.width * 2;
+    ctx.beginPath();
+    ctx.moveTo(lb.x1, lb.y1);
+    ctx.lineTo(lb.x2, lb.y2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(244, 114, 182, ' + lb.alpha + ')';
+    ctx.lineWidth = lb.width;
+    ctx.beginPath();
+    ctx.moveTo(lb.x1, lb.y1);
+    ctx.lineTo(lb.x2, lb.y2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255, 255, 255, ' + (lb.alpha * 0.6) + ')';
+    ctx.lineWidth = lb.width * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(lb.x1, lb.y1);
+    ctx.lineTo(lb.x2, lb.y2);
+    ctx.stroke();
+  }
+
+  // Particles
+  for (const p of game.particles) {
+    ctx.globalAlpha = Math.max(0, p.alpha);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ─────────────────────────────────────────
+//  Game Loop
+// ─────────────────────────────────────────
+let rafId = null;
+
+function startGameLoop() {
+  if (rafId) return; // already running
+  rafId = requestAnimationFrame(loop);
+}
+
+function loop(time) {
+  if (!fsm.isPlaying()) {
+    rafId = null;
+    return;
+  }
+  const dt = Math.min((time - game.lastTime) / 1000, 0.1);
+  game.lastTime = time;
+
+  update(dt);
+  render(time);
+  flushSounds();
+
+  rafId = requestAnimationFrame(loop);
+}
+
+// Idle render — stars + tower when not in gameplay
+function idleRender(time) {
+  if (fsm.isPlaying()) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const s of game.stars) {
+    const flicker = 0.5 + 0.5 * Math.sin(time * 0.001 * s.tw);
+    ctx.globalAlpha = s.a * flicker;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  const ts = getSprite('\uD83D\uDDFC', TOWER_SIZE, '#facc15', 20);
+  ctx.drawImage(ts.canvas, TOWER_X - ts.canvas.width / 2, game.towerY - ts.canvas.height / 2);
+  requestAnimationFrame(idleRender);
+}
+
+// ─────────────────────────────────────────
+//  High Scores
+// ─────────────────────────────────────────
+function getHighScores() {
+  try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; }
+  catch { return []; }
+}
+
+function saveHighScore(score, streak) {
+  const scores = getHighScores();
+  scores.push({ score, bestStreak: streak, date: new Date().toLocaleDateString() });
+  scores.sort((a, b) => b.score - a.score);
+  scores.splice(10);
+  localStorage.setItem(HS_KEY, JSON.stringify(scores));
+}
+
+function displayHighScores() {
+  const scores = getHighScores();
+  hsList.innerHTML = '';
+  scores.forEach((s, i) => {
+    const li = document.createElement('li');
+    li.textContent = '#' + (i + 1) + '  ' + s.score + ' pts  (streak ' + s.bestStreak + ')  ' + s.date;
+    if (s.score === game.score && s.bestStreak === game.bestStreak) {
+      li.className = 'current';
+    }
+    hsList.appendChild(li);
+  });
+}
+
+// ─────────────────────────────────────────
+//  Event Bindings (all inputs route through FSM)
+// ─────────────────────────────────────────
+startBtn.addEventListener('click', () => fsm.dispatch(Event.START));
+restartBtn.addEventListener('click', () => fsm.dispatch(Event.RESTART));
+
+btns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    // FSM guards: only PLAYING_READY accepts answers
+    if (fsm.current !== State.PLAYING_READY) return;
+    const val = parseInt(btn.dataset.value);
+    const correct = val === game.currentProblem.answer;
+    fsm.dispatch(correct ? Event.ANSWER_CORRECT : Event.ANSWER_WRONG, { btn });
+  });
+});
+
+document.addEventListener('visibilitychange', () => {
+  fsm.dispatch(document.hidden ? Event.TAB_BLUR : Event.TAB_FOCUS);
+});
+
+// ─────────────────────────────────────────
+//  Init — boot into MENU state
+// ─────────────────────────────────────────
+
+// Pre-warm sprite cache so no offscreen canvases are created mid-gameplay
+getSprite('\uD83D\uDDFC', TOWER_SIZE, '#facc15', 20);   // tower
+getSprite('\u26A1', 22, null, 0);                         // lightning tip
+getSprite('\uD83D\uDD25', 22, null, 0);                   // fireball
+for (let s = ALIEN_SIZE_MIN; s <= ALIEN_SIZE_MAX; s++) {
+  getSprite('\uD83D\uDEF8', s, '#a78bfa', 12);            // alien at each possible size
+}
+
+generateStars();
+requestAnimationFrame(idleRender);
+console.log('FSM: initialized in [' + fsm.current + ']');
+</script>
+
+<script data-goatcounter="https://deltafire.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>
