@@ -22,6 +22,15 @@ Build a streak of correct answers to unlock more powerful weapons:
 | 10+ | Lightning | Instant bolt with electric arc |
 | 20+ | Laser | Instant beam, destroys on contact |
 
+## Panic Button
+
+An emergency ability that destroys all aliens on screen in a sweeping left-to-right chain of double-sized explosions.
+
+- **Charges**: 3 per game, shown as ammo pips next to the PANIC label in the HUD
+- **Activate**: Press **Spacebar** or click the **PANIC** button in the top HUD bar
+- **Effect**: Each alien explodes sequentially from left to right with a 300ms stagger between each
+- **Pip indicator**: Lit red pips eject with a yellow flash animation as charges are spent; the button dims when all charges are used
+
 ## Difficulty Scaling
 
 Problems get harder as your streak grows:
